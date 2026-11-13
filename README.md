@@ -96,6 +96,7 @@ While it runs, the filter prints one line of JSON every 2 seconds. The useful fi
 - `late_hits`: words that were partly played before being recognised. `fully_late_hits` were played in full.
 - `input_peak`: loudness of incoming audio. `0` means the filter is receiving silence; check that Sound → Output is BlackHole 2ch.
 - `underrun_frames` and `drift_dropped_frames`: glitches in the output. Both should stay at or near 0.
+- `max_callback_gap_ms`: longest wait between two output callbacks since the last line. It should sit near 11; a spike means the sound stalled for a moment.
 - `status`: `running` is healthy. `degraded` means a word was late or a check was skipped.
 
 ## Troubleshooting

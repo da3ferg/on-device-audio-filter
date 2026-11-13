@@ -97,7 +97,7 @@ Reads the input one block per 20 ms tick, feeds the engine, and writes each rele
 
 ### Live mode (`run_live`, `Live`)
 
-Opens two audio streams through the `cpal` library: an input stream on a loopback device such as BlackHole 2ch, and an output stream on the real speakers. Both callbacks share one `Live` value behind a mutex.
+Opens two audio streams through the `cpal` library: an input stream on a loopback device such as BlackHole 2ch, and an output stream on the real speakers. Both callbacks share one `Live` value behind a mutex. The status line is built while holding that mutex but printed after releasing it, so a slow terminal can never stall the audio.
 
 - The input callback converts samples to 16-bit, re-cuts them into exact 20 ms blocks (the device delivers whatever chunk size it likes), feeds each block to the engine, and queues the block the engine releases.
 - The output callback plays from that queue.
@@ -121,6 +121,7 @@ One JSON object per line on stderr, every 2 seconds in live mode. The fields tha
 | `input_peak` | Loudest input sample since the last report; 0 means silence is arriving |
 | `underrun_frames` | Output frames filled with silence because none were ready |
 | `drift_dropped_frames` | Frames dropped to keep the two audio devices in step |
+| `max_callback_gap_ms` | Longest wait between output callbacks since the last report; a spike means a stall |
 
 ### Tests
 

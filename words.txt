@@ -1,4 +1,5 @@
 # One word per line. Add inflections explicitly.
+ass
 asshole
 assholes
 bastard
@@ -6,16 +7,26 @@ bastards
 bitch
 bitches
 bullshit
+cock
 damn
 damned
+dick
+dicks
 fuck
 fucked
 fucker
 fuckers
+fuckin
 fucking
+fucks
+hoe
+hoes
 motherfucker
 motherfuckers
-shit
-shitty
+motherfuckin
+motherfucking
 piss
 pussy
+shit
+shits
+shitty

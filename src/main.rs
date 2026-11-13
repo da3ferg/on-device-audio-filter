@@ -107,6 +107,10 @@ fn quoted(text: &str) -> String {
 
 /// One JSON object per line on stderr. `extra` values are already JSON.
 fn report<R: Recognition>(status: &str, engine: Option<&Engine<R>>, extra: &[(&str, String)]) {
+    eprintln!("{}", status_line(status, engine, extra));
+}
+
+fn status_line<R: Recognition>(status: &str, engine: Option<&Engine<R>>, extra: &[(&str, String)]) -> String {
     let mut fields = vec![("status".to_string(), quoted(status))];
     if let Some(e) = engine {
         let s = &e.stats;
@@ -128,7 +132,7 @@ fn report<R: Recognition>(status: &str, engine: Option<&Engine<R>>, extra: &[(&s
     }
     fields.extend(extra.iter().map(|(key, value)| (key.to_string(), value.clone())));
     let body: Vec<String> = fields.iter().map(|(key, value)| format!("{}:{value}", quoted(key))).collect();
-    eprintln!("{{{}}}", body.join(","));
+    format!("{{{}}}", body.join(","))
 }
 
 fn health<R: Recognition>(engine: &Engine<R>) -> &'static str {
@@ -320,6 +324,8 @@ struct Live {
     input_peak: i32,
     underrun_frames: u64, // counted in samples; halved when reported
     drift_dropped_frames: u64,
+    last_play: Option<f64>,
+    max_callback_gap_ms: f64, // longest wait between output callbacks; a spike means a glitch
 }
 
 impl Live {
@@ -356,6 +362,10 @@ impl Live {
     }
 
     fn play(&mut self, output: &mut [f32]) {
+        let time = now();
+        if let Some(last) = self.last_play.replace(time) {
+            self.max_callback_gap_ms = self.max_callback_gap_ms.max((time - last) * 1000.0);
+        }
         for sample in output.iter_mut() {
             *sample = match self.pending_out.pop_front() {
                 Some(value) => value as f32 / 32768.0,
@@ -383,6 +393,8 @@ fn run_live(opts: &Options) -> Result<(), String> {
         input_peak: 0,
         underrun_frames: 0,
         drift_dropped_frames: 0,
+        last_play: None,
+        max_callback_gap_ms: 0.0,
     }));
     let config = cpal::StreamConfig {
         channels: 2,
@@ -424,16 +436,21 @@ fn run_live(opts: &Options) -> Result<(), String> {
         if let Some(error) = live.failure.take() {
             return Err(error);
         }
-        report(
+        let line = status_line(
             progress(&live.engine),
             Some(&live.engine),
             &[
                 ("input_peak", live.input_peak.to_string()),
                 ("underrun_frames", (live.underrun_frames / 2).to_string()),
                 ("drift_dropped_frames", live.drift_dropped_frames.to_string()),
+                ("max_callback_gap_ms", rounded(live.max_callback_gap_ms).to_string()),
             ],
         );
+        live.max_callback_gap_ms = 0.0;
         live.input_peak = 0;
+        // Print only after releasing the lock: a slow terminal must never stall the audio callbacks.
+        drop(live);
+        eprintln!("{line}");
     }
 }
 
