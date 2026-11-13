@@ -27,6 +27,20 @@ WAV input must be stereo signed 16-bit PCM at 16, 32 or 48 kHz. Live mode needs 
 
 Options: `--delay-ms` (default 2000) is how far the output lags the input; `--hop-ms` (default 160) is the time between recognition checks; `--words FILE` replaces the built-in word list. Status is printed to stderr as JSON lines.
 
+## Word list
+
+The words to mute live in one plain text file: [`outputs/on-device-filter-go/words.txt`](outputs/on-device-filter-go/words.txt).
+
+- One English word per line. Case does not matter. Anything after `#` is a comment.
+- Only exact words are muted, so list each form you want (`word`, `words`, `wording`).
+
+Two ways to change it:
+
+- Edit `words.txt` and rebuild (`go build -o audiofilter .`). The list is built into the program.
+- Keep your own file anywhere and pass it at run time, no rebuild needed: `./audiofilter live --model MODEL_DIR --words my-words.txt`. This replaces the built-in list.
+
+The Python prototype has its own copy at `outputs/on-device-filter/words.txt` and takes the same `--words` option.
+
 ## Known limits
 
 - Tested on macOS on Apple Silicon only.
