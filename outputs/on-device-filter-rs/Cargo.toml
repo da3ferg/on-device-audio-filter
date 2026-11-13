@@ -1,0 +1,8 @@
+[package]
+name = "audio-filter"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+hound = "3.5"
+sherpa-onnx = "2.0.1"

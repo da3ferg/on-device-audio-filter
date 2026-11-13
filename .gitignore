@@ -1,0 +1,14 @@
+# Models, recordings, captures and experiments stay local.
+work/
+.claude/
+# Internal notes with machine-specific paths.
+outputs/on-device-filter/HANDOFF.md
+# Test audio is not redistributed here.
+outputs/on-device-filter/fixtures/*.wav
+outputs/on-device-filter/fixtures/*.ogg
+# Build output.
+outputs/on-device-filter-go/audiofilter
+outputs/on-device-filter-go/audiofilter.new
+outputs/on-device-filter-rs/target.nosync/
+__pycache__/
+.DS_Store
