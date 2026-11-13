@@ -4,6 +4,8 @@ Mutes listed words in any audio routed through a device output. Recognition, buf
 
 It is built for speech (podcasts, shows, calls). Music is not supported: the recogniser misses most sung words.
 
+How it works, part by part: [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Layout
 
 - `outputs/on-device-filter-go/` — the current version, in Go. Commands: `wav`, `live`, `devices`.
