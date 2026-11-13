@@ -2,7 +2,7 @@
 
 Mutes listed words in any audio routed through a device output. Recognition, buffering and muting all run locally; no audio leaves the machine.
 
-It is built for speech (podcasts, shows, calls). Music is not supported: the recogniser misses most sung words.
+It works on any audio with words in it, music included, and most live testing so far has been on music. Accuracy on music is uneven: it muted listed words live in some songs, but on one 90-second dancehall track (Jamaican Patois and English) it caught none of the 9 words marked by ear. Plain speech is recognised more reliably.
 
 How it works, part by part: [ARCHITECTURE.md](ARCHITECTURE.md).
 
@@ -47,5 +47,6 @@ The Python prototype has its own copy at `outputs/on-device-filter/words.txt` an
 
 - Tested on macOS on Apple Silicon only.
 - Only exact words on the list are muted; there is no contextual detection.
+- Sung, heavily accented or Patois words are often missed, because the recogniser was trained on spoken English.
 - Some words are recognised late. At a 1 second delay a few play in full; 2 seconds is the tested default.
 - Test audio and models are not included in this repository.
