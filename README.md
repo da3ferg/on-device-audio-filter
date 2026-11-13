@@ -12,9 +12,13 @@ It is written in Rust. Sound comes out about 2 seconds behind the original, beca
 
 ## Set up (once)
 
-You need a Mac with Apple Silicon, about 1 GB of free disk space, and an internet connection for the downloads below.
+You need a Mac with Apple Silicon, about 1 GB of free disk space, and an internet connection for the downloads below. All commands are typed into the Terminal app.
 
-1. Install Rust 1.85 or newer from [rustup.rs](https://rustup.rs).
+1. Install Apple's command line tools, then Rust 1.85 or newer from [rustup.rs](https://rustup.rs).
+
+   ```sh
+   xcode-select --install
+   ```
 
 2. Install [BlackHole 2ch](https://github.com/ExistentialAudio/BlackHole). It is a virtual audio device that lets the filter sit between your apps and your speakers. Restart the Mac afterwards.
 
@@ -37,7 +41,7 @@ You need a Mac with Apple Silicon, about 1 GB of free disk space, and an interne
 
 1. Open System Settings → Sound → Output and choose BlackHole 2ch. Your Mac goes silent; that is expected.
 
-2. Start the filter. It plays the filtered sound on your real speakers.
+2. Start the filter from the `on-device-audio-filter` folder. It plays the filtered sound on your real speakers. The first time, macOS asks whether Terminal may use the microphone; choose Allow, since that is how it is permitted to read BlackHole.
 
    ```sh
    ./target/release/audio-filter live \
