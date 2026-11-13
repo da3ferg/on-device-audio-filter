@@ -7,9 +7,9 @@ use std::thread::JoinHandle;
 use std::time::Instant;
 
 pub const BLOCK_MS: usize = 20;
-const HOP_MS: usize = 320;
-const WINDOW_MS: usize = 3200;
-const MIN_WINDOW_MS: usize = 1040;
+pub const HOP_MS: usize = 320;
+pub const WINDOW_MS: usize = 3200;
+pub const MIN_WINDOW_MS: usize = 1040;
 
 pub type Block = Arc<[i16]>;
 
@@ -26,6 +26,7 @@ pub struct Word {
     pub end: i64,
 }
 
+#[cfg(test)]
 impl Word {
     pub fn new(term: &str, start: i64, end: i64) -> Self {
         Word { term: term.to_string(), start, end }
@@ -250,6 +251,13 @@ impl<R: Recognition> Engine<R> {
             post: ms(90),
             edge: ms(120),
         }
+    }
+
+    /// Override the recognition window and the time between checks.
+    pub fn with_timing(mut self, window_ms: usize, hop_ms: usize) -> Self {
+        self.window_blocks = window_ms / BLOCK_MS;
+        self.hop_blocks = hop_ms / BLOCK_MS;
+        self
     }
 
     pub fn silence(&self) -> Vec<i16> {

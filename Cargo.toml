@@ -2,7 +2,9 @@
 name = "audio-filter"
 version = "0.1.0"
 edition = "2024"
+description = "Mutes listed words in audio routed through a device output, fully on-device."
 
 [dependencies]
+cpal = "0.16"
 hound = "3.5"
 sherpa-onnx = "2.0.1"

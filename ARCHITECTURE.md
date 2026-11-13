@@ -1,6 +1,6 @@
 # Architecture
 
-This describes the Go version in `outputs/on-device-filter-go/`. The Python prototype has the same design; the Go engine was ported from it, and on the speech test file the two produce byte-identical output.
+This describes the Rust program in `src/`.
 
 ## The idea in one paragraph
 
@@ -24,16 +24,15 @@ flowchart LR
 Two things run at once:
 
 - The audio path (capture → buffer → render) runs on the audio clock and never waits for recognition.
-- The recognition path (history → worker → recogniser → hits) runs on its own goroutine and hands results back through a small queue.
+- The recognition path (history → worker → recogniser → hits) runs on its own thread and hands results back through a small queue.
 
 ## Files
 
 | File | What it holds |
 | --- | --- |
-| `engine.go` | Delay buffer, history window, worker, hit list, mute rendering, statistics |
-| `recognition.go` | Word list loading, resampling, the Zipformer adapter, word matching |
-| `main.go` | Command line, WAV reading and writing, live audio devices, status reports |
-| `stream_test.go` | Engine, worker, pacing and word-matching tests |
+| `src/engine.rs` | Delay buffer, history window, worker, hit list, mute rendering, statistics, engine tests |
+| `src/recognition.rs` | Word list loading, resampling, the Zipformer adapter, word matching |
+| `src/main.rs` | Command line, WAV reading and writing, live audio devices, status reports |
 | `words.txt` | The built-in word list |
 
 ## Parts in detail
@@ -42,21 +41,21 @@ Two things run at once:
 
 Everything is stereo signed 16-bit PCM at 16, 32 or 48 kHz. Audio moves in 20 ms blocks (960 frames at 48 kHz). Positions are counted in frames since the start, so a word's position means the same thing to the recogniser and to the renderer.
 
-### Delay buffer (`Engine.buffer`)
+### Delay buffer (`Engine::buffer`)
 
 Every captured block is appended to a queue. A block is only released once the queue holds more than `delay / 20 ms` blocks, so output always trails input by the configured delay (`--delay-ms`, default 2000). Until the queue first fills, silence is played. The delay is fixed: slow recognition never makes the audio stall or stretch, it only makes a mute arrive late.
 
-### History window (`Engine.history`)
+### History window (`Engine::history`)
 
 The same blocks are also kept in a sliding window of the last 3.2 seconds (`--window-ms`). This is what the recogniser sees. It is longer than the delay on purpose: the recogniser is more accurate with context on both sides of a word.
 
-### Scheduling checks (`Engine.Capture`)
+### Scheduling checks (`Engine::capture`)
 
 The first check is submitted once 1.04 s has been captured; after that, one every 160 ms (`--hop-ms`). A shorter interval finds words sooner at the cost of more CPU. Each check is a snapshot of the whole history window, tagged with the absolute frame range it covers.
 
 ### Worker (`Worker`)
 
-One goroutine does all decoding. It holds at most one snapshot being decoded and one waiting. If a new snapshot arrives while one is already waiting, the waiting one is replaced and counted as `skipped_windows`. This keeps memory bounded and means that under load the recogniser always works on the freshest audio instead of falling further behind. Results go into a queue of 8; overflowing it is treated as a failure.
+One thread does all decoding. It holds at most one snapshot being decoded and one waiting. If a new snapshot arrives while one is already waiting, the waiting one is replaced and counted as `skipped_windows`. This keeps memory bounded and means that under load the recogniser always works on the freshest audio instead of falling further behind. Results go into a queue of 8; overflowing it is treated as a failure. If the recognition thread panics, that is also reported as a failure, so a crash can never turn into audio passing through unfiltered without anyone noticing.
 
 ### Recogniser (`Zipformer`)
 
@@ -66,15 +65,15 @@ One goroutine does all decoding. It holds at most one snapshot being decoded and
 
 Only matched words and their positions leave this part. The transcript is never stored or printed.
 
-### Word matching (`matchedWords`)
+### Word matching (`matched_words`)
 
-The model emits word pieces, so one word may arrive split across several tokens. The pieces are joined into a single string with a start and end position remembered for every byte. Whole words are then found with a regular expression, lower-cased, and looked up in the word list. A match takes the earliest start and latest end of its bytes. Matching is exact: `ass` does not match `assume`, and each form of a word must be listed.
+The model emits word pieces, so one word may arrive split across several tokens. The pieces are joined into a single string with a start and end position remembered for every byte. Whole words (letters, optionally joined by apostrophes) are then picked out, lower-cased, and looked up in the word list. A match takes the earliest start and latest end of its bytes. Matching is exact: `ass` does not match `assume`, and each form of a word must be listed.
 
 ### Word list (`vocabulary`)
 
 One English word per line, case-insensitive, `#` starts a comment. The default list is compiled into the program from `words.txt`; `--words FILE` replaces it at run time. A line that is not a single word is rejected with its line number.
 
-### Turning results into hits (`Engine.apply`, `Engine.addHit`)
+### Turning results into hits (`Engine::apply`, `Engine::add_hit`)
 
 Each result's word positions are converted from window-relative to absolute frames. Then:
 
@@ -82,9 +81,9 @@ Each result's word positions are converted from window-relative to absolute fram
 - Merging: overlapping windows report the same word several times with slightly different positions. A report that overlaps an existing hit for the same word is merged into it, widening the hit to cover both.
 - Pruning: hits that lie entirely before both the oldest window and the playback position are dropped.
 
-### Rendering the mute (`Engine.Render`)
+### Rendering the mute (`Engine::render`)
 
-When a block is released, every hit is widened by a 400 ms lead-in and a 90 ms tail, with an 8 ms linear fade on each side to avoid clicks. Frames inside that range are scaled toward zero on both channels; frames outside are passed through bit-for-bit. The lead-in is long because drawn-out words audibly begin well before the recogniser's first token timestamp.
+When a block is released, every hit is widened by a 400 ms lead-in and a 90 ms tail, with an 8 ms linear fade on each side to avoid clicks. Frames inside that range are scaled toward zero on both channels; frames outside are passed through unchanged. The lead-in is long because drawn-out words audibly begin well before the recogniser's first token timestamp.
 
 ### Deadlines and late hits
 
@@ -92,15 +91,20 @@ Each render call carries a deadline: the time that block is due. Only results th
 
 A hit is counted as late when some of the word itself had already been played before it was recognised, and fully late when all of it had. `max_late_core_ms` is the longest stretch of a word that escaped. A larger `--delay-ms` is the direct fix for late hits.
 
-### WAV mode (`runWav`, `paceWav`)
+### WAV mode (`run_wav`, `pace_wav`)
 
 Reads the input one block per 20 ms tick, feeds the engine, and writes each released block to a temporary file that is renamed over the output only on success. The output has exactly the same length and timeline as the input. The clock and the wait function are passed in, which lets the tests run the whole loop instantly with a fake clock.
 
-### Live mode (`runLive`)
+### Live mode (`run_live`, `Live`)
 
-Opens one duplex audio device through miniaudio (the `malgo` binding): capture from a loopback device such as BlackHole 2ch, playback to the real speakers. The device delivers audio in whatever chunk size it likes, so input is re-cut into exact 20 ms blocks for the engine and output is queued back out. One block of silence is queued at start so that queue can never run dry; `underrun_frames` counts any output that had to be filled with silence and should stay at 0.
+Opens two audio streams through the `cpal` library: an input stream on a loopback device such as BlackHole 2ch, and an output stream on the real speakers. Both callbacks share one `Live` value behind a mutex.
 
-A mutex guards the engine between the audio callback and the status reporter.
+- The input callback converts samples to 16-bit, re-cuts them into exact 20 ms blocks (the device delivers whatever chunk size it likes), feeds each block to the engine, and queues the block the engine releases.
+- The output callback plays from that queue.
+
+Two blocks of silence are queued at start so the output never finds the queue empty just because the two callbacks are out of step. `underrun_frames` counts output that had to be filled with silence and should stay at 0.
+
+The two devices run on separate clocks. If the output device is the slower one, the queue slowly grows; once it holds 200 ms the oldest 20 ms block is dropped and counted in `drift_dropped_frames`. An Aggregate Device with drift correction (Audio MIDI Setup) avoids this entirely.
 
 ### Status reports (`report`)
 
@@ -108,7 +112,7 @@ One JSON object per line on stderr, every 2 seconds in live mode. The fields tha
 
 | Field | Meaning |
 | --- | --- |
-| `status` | `priming`, `running`, `degraded` (late hits or skipped windows), `complete`, `stopped`, `failed` |
+| `status` | `priming`, `running`, `degraded` (late hits or skipped windows), `complete`, `failed` |
 | `hits` | Distinct words muted |
 | `late_hits`, `fully_late_hits` | Words partly or wholly played before being recognised |
 | `max_decode_ms` | Slowest single recognition check |
@@ -116,10 +120,11 @@ One JSON object per line on stderr, every 2 seconds in live mode. The fields tha
 | `max_hit_age_ms` | Longest gap between a word starting and being recognised |
 | `input_peak` | Loudest input sample since the last report; 0 means silence is arriving |
 | `underrun_frames` | Output frames filled with silence because none were ready |
+| `drift_dropped_frames` | Frames dropped to keep the two audio devices in step |
 
-### Tests (`stream_test.go`)
+### Tests
 
-The tests use a hand-driven worker, so they are deterministic and need no model. They cover: audio is unchanged outside mutes and fades; WAV pacing never reads ahead or changes length; the history window stays bounded with absolute positions; a result that completes after a block's deadline cannot mute it; overlap merging and edge exclusion; repeated and duplicate late reports; a recogniser failure stops output before a block is lost; the worker replaces waiting snapshots without growing; and words split across tokens are matched whole. They do not measure recognition accuracy on real speech.
+`cargo test` runs 13 tests. They use a hand-driven worker, so they are deterministic and need no model. They cover: audio is unchanged outside mutes and fades; WAV pacing never reads ahead or changes length; the history window stays bounded with absolute positions; a result that completes after a block's deadline cannot mute it; overlap merging and edge exclusion; repeated and duplicate late reports; a recogniser failure stops output before a block is lost; the worker replaces waiting snapshots without growing; a panic in recognition becomes an engine error; words split across tokens are matched whole; word list parsing; and option validation. They do not measure recognition accuracy on real speech or music.
 
 ## Timing budget
 

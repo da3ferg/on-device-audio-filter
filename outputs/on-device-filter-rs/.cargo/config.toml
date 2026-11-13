@@ -1,3 +1,0 @@
-[build]
-# iCloud ignores *.nosync, keeping build output out of sync.
-target-dir = "target.nosync"
